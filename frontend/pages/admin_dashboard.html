@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin Dashboard | SQL Migrator</title>
+  <link rel="stylesheet" href="../css/global.css" />
+  <link rel="stylesheet" href="../css/sidebar.css" />
+  <link rel="stylesheet" href="../css/dashboard.css" />
+  <link rel="stylesheet" href="../css/tables.css" />
+</head>
+<body>
+  <div id="sidebar-container"></div>
+  <div class="page-content">
+    <header class="page-header">
+      <div class="header-content">
+        <h1>SQL Migrator</h1>
+        <p>Database Migration & Management Platform</p>
+      </div>
+    </header>
+    <main class="content-inner">
+      <section class="dashboard-summary" id="dashboard-summary"></section>
+      <section class="top-row">
+        <div class="card chart-card">
+          <h3>Migration Trends</h3>
+          <canvas id="migration-trends-chart" height="180"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3>User Activity</h3>
+          <canvas id="user-activity-chart" height="180"></canvas>
+        </div>
+        <div class="card chart-card">
+          <h3>Database Usage</h3>
+          <canvas id="database-usage-chart" height="180"></canvas>
+        </div>
+      </section>
+      
+      <section class="bottom-row" style="margin-top: 24px;">
+        <div class="card table-card">
+          <div class="card-header">
+            <h3>Recent Activity</h3>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Email</th>
+                <th>Conversion</th>
+                <th>Status</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="admin-recent-activity">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/dashboard.js"></script>
+  <script>initDashboardPage();</script>
+</body>
+</html>

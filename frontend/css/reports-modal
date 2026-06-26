@@ -1,0 +1,150 @@
+/* ── Report Modal ─────────────────────────────── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.72);
+  z-index: 9999;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.modal-overlay.modal-open {
+  display: flex;
+}
+
+.modal-box {
+  position: relative;
+  z-index: 10000;
+  width: 100%;
+  max-width: 620px;
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6);
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Header */
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.modal-header h2 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--text);
+}
+.modal-close {
+  padding: 6px 14px;
+  font-size: 0.9rem;
+  border-radius: 10px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Meta section */
+.modal-meta {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 0.9rem;
+}
+.modal-label {
+  width: 90px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-weight: 500;
+}
+.modal-value {
+  color: var(--text);
+  word-break: break-all;
+}
+
+/* Section title */
+.modal-section-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 12px;
+}
+
+/* Summary rows — prefixed to avoid conflict with reports.css .report-row */
+.migration-summary-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--border);
+}
+.migration-summary-row:last-child {
+  border-bottom: none;
+}
+.msr-icon {
+  font-size: 1.1rem;
+  padding-top: 2px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
+.msr-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.msr-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+.msr-detail {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin: 0;
+}
+.msr-error {
+  font-size: 0.82rem;
+  color: var(--danger);
+  margin: 0;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.msr-status {
+  flex-shrink: 0;
+  align-self: flex-start;
+  margin-top: 2px;
+}
+
+/* Footer */
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+
+/* Force sidebar below modal when modal is open */
+body.modal-active .sidebar {
+  z-index: 1;
+}

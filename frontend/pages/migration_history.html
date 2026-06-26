@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Migration History | SQL Migrator</title>
+  <link rel="stylesheet" href="../css/global.css" />
+  <link rel="stylesheet" href="../css/sidebar.css" />
+  <link rel="stylesheet" href="../css/tables.css" />
+</head>
+<body>
+  <div id="sidebar-container"></div>
+  <div class="page-content">
+    <header class="page-header">
+      <div class="header-content">
+        <h1>SQL Migrator</h1>
+        <p>Database Migration & Management Platform</p>
+      </div>
+    </header>
+    <main class="content-inner">
+      <section class="stats-grid">
+        <div class="card metric-card"><h3>Total</h3><strong id="stat-total">0</strong></div>
+        <div class="card metric-card"><h3>Successful</h3><strong id="stat-success">0</strong></div>
+        <div class="card metric-card"><h3>Warning</h3><strong id="stat-warning">0</strong></div>
+        <div class="card metric-card"><h3>Failed</h3><strong id="stat-failed">0</strong></div>
+      </section>
+      <section class="card">
+        <div class="table-controls">
+          <input type="search" id="search-history" placeholder="Search history" aria-label="Search migration history" />
+          <select id="filter-status" aria-label="Filter by status">
+            <option value="">All Status</option>
+            <option value="completed">Completed</option>
+            <option value="running">Running</option>
+            <option value="failed">Failed</option>
+          </select>
+          <input type="date" id="filter-start-date" aria-label="Start date" />
+          <input type="date" id="filter-end-date" aria-label="End date" />
+        </div>
+        <div class="table-wrapper">
+          <table class="table-block" aria-label="Migration history table">
+            <thead>
+              <tr><th>Migration ID</th><th>User</th><th>Source</th><th>Target</th><th>Type</th><th>Date</th><th>Duration</th><th>Status</th></tr>
+            </thead>
+            <tbody id="history-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="../js/api.js"></script>
+  <script src="../js/utils.js"></script>
+  <script src="../js/sidebar.js"></script>
+  <script src="../js/history.js"></script>
+  <script>initHistoryPage();</script>
+</body>
+</html>

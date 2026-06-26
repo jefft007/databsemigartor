@@ -1,0 +1,212 @@
+.report-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: nowrap;
+}
+
+.report-actions button {
+  min-width: 90px;
+  height: 40px;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-view {
+  background: #4f46e5;
+  color: #fff;
+}
+
+.btn-view:hover {
+  background: #4338ca;
+  transform: translateY(-1px);
+}
+
+.btn-delete {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-delete:hover {
+  background: #b91c1c;
+  transform: translateY(-1px);
+}
+.btn-danger {
+  background: #dc2626;
+  color: white;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  margin-left: 8px;
+}
+
+.btn-danger:hover {
+  background: #b91c1c;
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.report-card {
+  padding: 22px;
+}
+
+.report-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.report-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.report-actions button {
+  padding: 10px 16px;
+  border-radius: 14px;
+}
+
+.report-table th,
+.report-table td {
+  padding: 16px 18px;
+}
+
+/* ==========================
+   REPORT MODAL
+========================== */
+
+.report-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.report-modal-content {
+  width: 850px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  background: #151b2d;
+  color: #ffffff;
+  border-radius: 18px;
+  padding: 28px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+.report-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+}
+
+.report-modal-header h2 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.report-modal-header button {
+  border: none;
+  background: transparent;
+  color: #ffffff;
+  font-size: 28px;
+  cursor: pointer;
+}
+
+.report-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.report-detail-grid p {
+  margin: 0;
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.05);
+}
+
+.report-modal-body h3 {
+  margin-top: 22px;
+  margin-bottom: 12px;
+  color: #ffffff;
+}
+
+.report-warning-item {
+  background: rgba(245, 158, 11, 0.15);
+  border-left: 4px solid #f59e0b;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.report-success-item {
+  background: rgba(34, 197, 94, 0.15);
+  border-left: 4px solid #22c55e;
+  padding: 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+
+.report-info-box {
+  background: rgba(59,130,246,0.12);
+  border-left: 4px solid #3b82f6;
+  padding: 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.report-error-box {
+  background: rgba(239,68,68,0.15);
+  border-left: 4px solid #ef4444;
+  padding: 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+/* Responsive */
+
+@media (max-width: 1024px) {
+  .report-grid,
+  .report-row {
+    grid-template-columns: 1fr;
+  }
+
+  .report-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .report-modal-content {
+    width: 100%;
+    max-width: 100%;
+    padding: 20px;
+  }
+}
+.btn-view {
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+}
+
+.btn-delete {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
