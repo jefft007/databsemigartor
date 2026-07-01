@@ -65,7 +65,9 @@ async function loadHistoryData() {
   }
 
   try {
-    const response = await apiRequest('/migration/history', 'GET');
+    const userRole = String(getUserInfo()?.role || '').toLowerCase();
+    const endpoint = userRole === 'admin' ? '/history/all' : '/history';
+    const response = await apiRequest(endpoint, 'GET');
     allHistoryRecords = response.history || [];
 
     updateStatsCards(allHistoryRecords);
@@ -145,12 +147,13 @@ function renderHistoryTable(records) {
 
     const sourceClean = record.source_db || 'N/A';
     const targetClean = record.target_db || 'N/A';
-    const duration = `${(record.id % 4) + 2}m`;
+    const duration = record.duration || `${(record.id % 4) + 2}m`;
+    const recordUser = record.user_name || record.user_id || currentUser;
 
     return `
       <tr>
         <td>${migrationId}</td>
-        <td>${currentUser}</td>
+        <td>${recordUser}</td>
         <td title="${sourceClean}">${sourceClean}</td>
         <td title="${targetClean}">${targetClean}</td>
         <td>${typeLabel}</td>

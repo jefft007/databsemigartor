@@ -7,6 +7,8 @@ import os
 import json
 import re
 import pandas as pd
+import numpy as np
+from datetime import datetime, date
 from typing import Dict, Any, List, Optional
 
 
@@ -62,6 +64,33 @@ def _read_file(file_path: str) -> pd.DataFrame:
     if ext in (".xlsx", ".xls"):
         return pd.read_excel(file_path)
     raise ValueError(f"Unsupported file type: {ext}")
+
+
+
+def _json_safe_value(value):
+    """Convert pandas/numpy/datetime values into JSON-safe Python values."""
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    if isinstance(value, np.integer):
+        return int(value)
+
+    if isinstance(value, np.floating):
+        return int(value) if float(value).is_integer() else float(value)
+
+    if isinstance(value, np.bool_):
+        return bool(value)
+
+    return value
 
 
 # --- Column-name hint patterns (applied when dtype gives object/TEXT) ---
@@ -123,7 +152,7 @@ def _sample_is_datetime(value: str) -> bool:
     # Covers DD-MM-YYYY, YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, and ISO 8601
     _DT_PAT = re.compile(
         r"^(\d{1,4}[-/\.]\d{1,2}[-/\.]\d{2,4}"          # date part
-        r"([ T]\d{2}:\d{2}(:\d{2})?)?$)"                  # optional time
+        r"([ T]\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})?)?$)"                  # optional time
     )
     return bool(_DT_PAT.match(value.strip()))
 
@@ -188,15 +217,19 @@ def _check_phone(value: str) -> bool:
 
 def _check_currency(value: str) -> bool:
     v = value.strip()
+    if v.startswith("-"):
+        v = v[1:].strip()
     # Strip a single leading currency symbol/word (₹, $, Rs., USD, etc.) and
     # thousands separators, then require the remainder to parse as a number.
-    v = _CURRENCY_SYMBOL_PATTERN.sub("", v, count=1)
+    v = _CURRENCY_SYMBOL_PATTERN.sub("", v, count=1).strip()
+    if v.startswith("-"):
+        v = v[1:].strip()
     v = _CURRENCY_STRIP_PATTERN.sub("", v)
     try:
-        amount = float(v)
+        float(v)
     except (ValueError, TypeError):
         return False
-    return amount >= 0
+    return True
 
 
 def _check_percentage(value: str) -> bool:
@@ -363,6 +396,8 @@ def _value_matches_type(value: str, expected: str, allowed_values: Optional[List
             return True
         except (ValueError, TypeError):
             return False
+    if expected == "DATETIME":
+        return _sample_is_datetime(str_val)
     if expected == "ENUM":
         return _check_enum(str_val, allowed_values)
     if expected in _FORMAT_CHECKERS:
@@ -501,6 +536,7 @@ def validate_file_for_import(
     file_path: str,
     column_type_overrides: Dict[str, str] = None,
     column_enum_values: Dict[str, List[str]] = None,
+    corrections: Dict[str, str] = None,
     page: int = 1,
     page_size: int = 100,
 ) -> Dict[str, Any]:
@@ -511,6 +547,26 @@ def validate_file_for_import(
     df = _read_file(file_path)
     df.columns = [col.strip() for col in df.columns]
     columns = list(df.columns)
+    
+    corrections = corrections or {}
+    for key, new_value in corrections.items():
+        try:
+            row_idx_str, col_name = key.split(":", 1)
+            row_idx = int(row_idx_str)
+        except (ValueError, AttributeError):
+            continue
+
+        if col_name not in df.columns:
+            continue
+        if row_idx < 0 or row_idx >= len(df):
+            continue
+
+        if new_value is None or str(new_value).strip() == "":
+            cleaned_value = None
+        else:
+            cleaned_value = str(new_value)
+
+        df.iat[row_idx, df.columns.get_loc(col_name)] = cleaned_value
 
     col_types = _detect_column_types(df)
     if column_type_overrides:
@@ -528,10 +584,7 @@ def validate_file_for_import(
         issues = _validate_row(row, col_types, column_enum_values)
         row_data = {}
         for col, val in row.items():
-            if pd.isna(val):
-                row_data[col] = None
-            else:
-                row_data[col] = val if not isinstance(val, float) else (int(val) if val == int(val) else val)
+            row_data[col] = _json_safe_value(val)
 
         if issues:
             issues = _detect_row_shift(row_data, issues, columns, col_types, column_enum_values)
@@ -556,16 +609,24 @@ def validate_file_for_import(
     issue_rows = [r for r in all_rows if r["status"] == "error"]
 
     return {
+        "success": True,
+        "valid": total_issues == 0,
+        "validation_failed": total_issues > 0,
+        "columns": columns,
+        "schema": col_types,
+        "preview_rows": page_rows,
+        "validation_errors": issue_rows[:500],
+        "warnings": [],
+
         "file_name": os.path.basename(file_path),
         "total_rows": total_rows,
         "total_issues": total_issues,
         "total_possible_shifts": total_shifts,
-        "columns": columns,
         "column_types": col_types,
         "column_enum_values": column_enum_values,
         "supported_type_overrides": _SUPPORTED_OVERRIDES,
         "rows": page_rows,
-        "issue_rows": issue_rows[:500],  # cap at 500 for safety
+        "issue_rows": issue_rows[:500],
         "pagination": {
             "page": page,
             "page_size": page_size,

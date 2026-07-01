@@ -36,7 +36,7 @@ const STAGING = (() => {
         <div>
           <p style="font-size:0.85rem;color:var(--muted);margin:0 0 10px;">Column Type Mapping — change types before importing:</p>
           <div class="col-type-grid" id="staging-col-types"></div>
-          <button class="button-secondary" style="margin-top:10px;font-size:0.82rem;padding:7px 16px;"
+          <button type="button" class="button-secondary" style="margin-top:10px;font-size:0.82rem;padding:7px 16px;"
             onclick="STAGING.revalidate()">Re-validate with updated types</button>
         </div>
 
@@ -98,17 +98,48 @@ const STAGING = (() => {
       validateFd.set('page', _currentPage);
       validateFd.set('page_size', PAGE_SIZE);
       validateFd.set('column_type_overrides', JSON.stringify(_typeOverrides));
+      validateFd.set('corrections', JSON.stringify(_corrections));
 
       const resp = await apiRequest('/import/validate', 'POST', validateFd);
+      console.log("FILE_TO_SQL_PREVIEW_RESPONSE", resp);
 
-      if (!resp || resp.message === 'Cannot connect to server. Make sure the backend is running on http://127.0.0.1:5000/api') {
-        throw new Error('Cannot reach the backend. Make sure Flask is running on port 5000.');
+      if (!resp || resp.message?.startsWith('Fetch Error')) {
+        throw new Error(resp ? resp.message : 'Cannot reach the backend. Response was empty.');
       }
-      if (!resp.validation) {
+      
+      // Map possible arrays indicating issues
+      const vErrors = resp.validation_errors || resp.errors || resp.invalid_rows || [];
+      const hasIssues = vErrors.length > 0;
+      const isSuccess = resp.success === true && !hasIssues;
+
+      if (isSuccess || hasIssues) {
+        // Map the properties safely so that the rest of staging.js can render correctly.
+        const columns = resp.columns || resp.validation?.columns || [];
+        const rows = resp.preview_rows || resp.rows || resp.validation?.rows || [];
+        const colTypes = resp.schema || resp.column_types || resp.mapping || resp.validation?.column_types || {};
+        const totalRows = resp.total_rows || resp.validation?.total_rows || rows.length;
+        
+        _validation = {
+          file_name: resp.file_name || _formData.get('file')?.name || 'file',
+          total_rows: totalRows,
+          total_issues: hasIssues ? vErrors.length : 0,
+          columns: columns,
+          column_types: colTypes,
+          column_enum_values: resp.column_enum_values || resp.validation?.column_enum_values || {},
+          supported_type_overrides: resp.supported_type_overrides || resp.validation?.supported_type_overrides || ['TEXT', 'INTEGER', 'FLOAT', 'BOOLEAN', 'DATETIME', 'ENUM'],
+          rows: rows,
+          issue_rows: hasIssues ? vErrors : [],
+          pagination: resp.pagination || resp.validation?.pagination || { page: 1, page_size: Math.max(100, rows.length), total_pages: 1 },
+          valid: isSuccess,
+          file_path: resp.file_path || resp.validation?.file_path
+        };
+      } else if (resp.validation) {
+        _validation = resp.validation;
+        _validation.valid = _validation.total_issues === 0;
+      } else {
         throw new Error(resp.message || resp.error || 'Unexpected response from server.');
       }
 
-      _validation = resp.validation;
       _render();
     } catch (e) {
       const errEl = document.getElementById('staging-tbody');
@@ -123,6 +154,7 @@ const STAGING = (() => {
   }
 
   async function revalidate() {
+
     // Collect current dropdown values as overrides
     document.querySelectorAll('.col-type-select').forEach(sel => {
       _typeOverrides[sel.dataset.col] = sel.value;
@@ -152,12 +184,23 @@ const STAGING = (() => {
 
   function _renderStats() {
     const v = _validation;
-    document.getElementById('staging-stats').innerHTML = `
-      <div class="staging-stat"><label>Total Rows</label><strong>${v.total_rows}</strong></div>
-      <div class="staging-stat ok"><label>Valid</label><strong>${v.total_rows - v.total_issues}</strong></div>
-      <div class="staging-stat error"><label>Issues</label><strong>${v.total_issues}</strong></div>
-      <div class="staging-stat"><label>Columns</label><strong>${v.columns.length}</strong></div>
-    `;
+    const isValid = v.valid === true || v.total_issues === 0;
+    
+    if (isValid) {
+      document.getElementById('staging-stats').innerHTML = `
+        <div class="staging-stat ok" style="width:100%;text-align:center;padding:15px;background:#dcfce7;color:#166534;border:1px solid #16a34a;border-radius:6px;">
+          <h3 style="margin:0;">✅ Validation Passed</h3>
+          <p style="margin:5px 0 0 0;font-size:0.9rem;">No issues found in ${v.total_rows} rows.</p>
+        </div>
+      `;
+    } else {
+      document.getElementById('staging-stats').innerHTML = `
+        <div class="staging-stat"><label>Total Rows</label><strong>${v.total_rows}</strong></div>
+        <div class="staging-stat ok"><label>Valid</label><strong>${v.total_rows - v.total_issues}</strong></div>
+        <div class="staging-stat error"><label>Issues</label><strong>${v.total_issues}</strong></div>
+        <div class="staging-stat"><label>Columns</label><strong>${v.columns.length}</strong></div>
+      `;
+    }
   }
 
   function _renderColTypes() {
@@ -189,7 +232,17 @@ const STAGING = (() => {
     document.getElementById('staging-thead').innerHTML =
       `<tr><th>#</th>${v.columns.map(c => `<th>${c}</th>`).join('')}<th>Issues</th></tr>`;
 
-    if (rows.length === 0) {
+    const isValid = v.valid === true || v.total_issues === 0;
+
+    if (isValid) {
+      document.getElementById('staging-tbody').innerHTML =
+        `<tr><td colspan="${v.columns.length + 2}" style="text-align:center;color:var(--success);padding:24px;">
+          Validation passed. All rows are valid. Click "Approve & Import" to proceed.
+        </td></tr>`;
+      return;
+    }
+
+    if (!rows || rows.length === 0) {
       document.getElementById('staging-tbody').innerHTML =
         `<tr><td colspan="${v.columns.length + 2}" style="text-align:center;color:var(--muted);padding:24px;">
           ${_showOnlyErrors ? 'No issues found — all rows are valid.' : 'No rows to display.'}
@@ -312,7 +365,6 @@ const STAGING = (() => {
       // or a new issue was introduced), stay open and show what's still wrong
       // instead of closing as if it succeeded.
       if (response && response.rejected) {
-        if (btn) { btn.disabled = false; btn.textContent = 'Approve & Import'; }
         await _validate();
         alert(`${response.warning_count || 0} row(s) still have issues. Please fix the highlighted cells.`);
         return;
@@ -323,8 +375,9 @@ const STAGING = (() => {
         handleMigrationResponse(response, null);
       }
     } catch (e) {
-      if (btn) { btn.disabled = false; btn.textContent = 'Approve & Import'; }
       alert('Import failed: ' + (e.message || e));
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Approve & Import'; }
     }
   }
 

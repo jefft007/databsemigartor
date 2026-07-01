@@ -71,7 +71,7 @@ function requireAdmin() {
     window.location.href = '../pages/login.html';
     return false;
   }
-  if (user.role !== 'Admin') {
+  if (String(user.role).toLowerCase() !== 'admin') {
     window.location.href = '../pages/dashboard.html';
     return false;
   }
@@ -97,7 +97,7 @@ function buildSidebarLinks(role) {
     { label: 'About', path: '../pages/about.html', icon: 'ℹ️' },
     { label: 'Settings', path: '../pages/settings.html', icon: '⚙️' },
   ];
-  const links = role === 'Admin' ? adminLinks : userLinks;
+  const links = String(role).toLowerCase() === 'admin' ? adminLinks : userLinks;
   nav.innerHTML = links
     .map((item) => `
       <a href="${item.path}" class="sidebar-link" data-path="${item.path}">

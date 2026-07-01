@@ -81,19 +81,16 @@ class ReportResource(Resource):
         return {"message": "Report deleted successfully"}, 200
 
 
+from backend.utils.decorators import admin_required
+
 class ReportsListResource(Resource):
     @jwt_required()
     def get(self):
         user_id = get_jwt_identity()
-        role = get_jwt().get("role", "")
 
         try:
-            if str(role).lower() == "admin":
-                reports = Report.query.order_by(Report.id.desc()).all()
-                history_records = MigrationHistory.query.order_by(MigrationHistory.timestamp.desc()).all()
-            else:
-                reports = Report.query.filter_by(user_id=user_id).order_by(Report.id.desc()).all()
-                history_records = MigrationHistory.query.filter_by(user_id=user_id).order_by(MigrationHistory.timestamp.desc()).all()
+            reports = Report.query.filter_by(user_id=user_id).order_by(Report.id.desc()).all()
+            history_records = MigrationHistory.query.filter_by(user_id=user_id).order_by(MigrationHistory.timestamp.desc()).all()
 
             report_results = [build_report_response(report) for report in reports]
 
@@ -175,6 +172,69 @@ class ReportsListResource(Resource):
             return {
                 "message": str(e)
             }, 500
+
+class ReportsAllResource(Resource):
+    @admin_required
+    def get(self):
+        try:
+            reports = Report.query.order_by(Report.id.desc()).all()
+            history_records = MigrationHistory.query.order_by(MigrationHistory.timestamp.desc()).all()
+            report_results = [build_report_response(report) for report in reports]
+            
+            for record in history_records:
+                raw_summary = safe_json_load(getattr(record, "report_summary", None), default={})
+
+                rows_imported = (raw_summary.get("rows_imported") or raw_summary.get("total_records") or raw_summary.get("rows_transferred") or 0)
+                rows_failed = (raw_summary.get("rows_failed") or raw_summary.get("failed_count") or 0)
+                rows_cancelled = (raw_summary.get("rows_cancelled") or raw_summary.get("cancelled_count") or 0)
+
+                warnings_list = raw_summary.get("warnings", [])
+                warning_count = int(raw_summary.get("warning_count") or len(warnings_list) or rows_failed or 0)
+
+                enriched_summary = {
+                    **raw_summary,
+                    "rows_imported": rows_imported,
+                    "total_records": rows_imported,
+                    "failed_count": rows_failed,
+                    "cancelled_count": rows_cancelled,
+                    "warning_count": warning_count,
+                    "warnings": warnings_list,
+                    "migration_type": getattr(record, "migration_type", None),
+                    "source_db": getattr(record, "source_db", "N/A"),
+                    "target_db": getattr(record, "target_db", "N/A"),
+                    "status": getattr(record, "status", "Generated"),
+                }
+
+                history_report = {
+                    "id": f"H-{record.id}",
+                    "report_name": f"Migration Report H-{record.id}",
+                    "type": getattr(record, "migration_type", "Migration Report"),
+                    "migration_type": getattr(record, "migration_type", "Migration Report"),
+                    "generated_by": "System",
+                    "date": record.timestamp.isoformat() if getattr(record, "timestamp", None) else "N/A",
+                    "timestamp": record.timestamp.isoformat() if getattr(record, "timestamp", None) else "N/A",
+                    "status": getattr(record, "status", "Generated"),
+                    "migration_id": None,
+                    "source_db": getattr(record, "source_db", "N/A"),
+                    "target_db": getattr(record, "target_db", "N/A"),
+                    "report_format": "N/A",
+                    "summary": json.dumps(enriched_summary, default=str),
+                    "report_summary": json.dumps(enriched_summary, default=str),
+                    "errors": getattr(record, "errors", None),
+                    "file_path": None,
+                }
+                report_results.append(history_report)
+
+            return {
+                "reports": report_results,
+                "history": report_results,
+                "summary": {
+                    "total_reports": len(report_results),
+                    "reports_generated": len(report_results),
+                },
+            }, 200
+        except Exception as e:
+            return {"message": str(e)}, 500
 
 
 class ReportGenerateResource(Resource):

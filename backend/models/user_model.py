@@ -11,15 +11,18 @@ class User(db.Model):
     username = db.Column(db.String(120), unique=True, nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(50), default="User", nullable=False)
+    role = db.Column(db.String(50), default="user", nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_login = db.Column(db.DateTime, nullable=True)
 
     def __init__(
         self,
         username: str,
         email: str,
         password_hash: str,
-        role: str = "User",
+        role: str = "user",
+        is_active: bool = True,
     ) -> None:
         """Explicit constructor so type checkers recognize all column kwargs.
 
@@ -29,7 +32,8 @@ class User(db.Model):
         self.username = username
         self.email = email
         self.password_hash = password_hash
-        self.role = role
+        self.role = role.lower() if role else "user"
+        self.is_active = is_active
 
     def to_dict(self) -> dict:
         return {
@@ -37,5 +41,7 @@ class User(db.Model):
             "username": self.username,
             "email": self.email,
             "role": self.role,
+            "is_active": self.is_active,
             "created_at": self.created_at.isoformat(),
+            "last_login": self.last_login.isoformat() if self.last_login else None,
         }

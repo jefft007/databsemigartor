@@ -1,4 +1,4 @@
-const API_BASE_URL = 'http://127.0.0.1:5000/api';
+const API_BASE_URL = `http://${window.location.hostname || '127.0.0.1'}:5000/api`;
 
 function getAuthToken() {
   return localStorage.getItem('sqlMigratorToken');
@@ -61,7 +61,7 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
         }
       };
 
-      xhr.onerror = () => resolve({ message: 'Cannot connect to server. Make sure the backend is running on ' + API_BASE_URL });
+      xhr.onerror = () => resolve({ message: 'Cannot connect to server. Failed URL: ' + fullUrl });
       
       xhr.send(data);
     });
@@ -80,12 +80,14 @@ async function apiRequest(endpoint, method = 'GET', data = null, options = {}) {
     const response = await fetch(fullUrl, request);
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      return payload || { message: response.statusText || 'API error' };
+      return payload || { message: `Backend error ${response.status}: ${response.statusText}` };
     }
     return payload;
   } catch (error) {
     console.error('API request failed:', error);
-    return { message: 'Cannot connect to server. Make sure the backend is running on ' + API_BASE_URL };
+    return { 
+  message: `Fetch Error: ${error.message}. Failed URL: ${fullUrl}` 
+};
   }
 }
 

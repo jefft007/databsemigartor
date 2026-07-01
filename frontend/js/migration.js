@@ -612,32 +612,30 @@ let filename =
   response?.result?.filename ||
   "exported_file";
 
-if (!downloadPath && filename) {
-  downloadPath = `/export/download/${encodeURIComponent(filename)}`;
-}
+if (downloadPath) {
+  let finalDownloadUrl = "";
 
-let finalDownloadUrl = "";
+  if (downloadPath.startsWith("http")) {
+    finalDownloadUrl = downloadPath;
+  } else if (downloadPath.startsWith("/api")) {
+    finalDownloadUrl = `http://localhost:5000${downloadPath}`;
+  } else if (downloadPath.startsWith("/")) {
+    finalDownloadUrl = `${API_BASE_URL}${downloadPath}`;
+  }
 
-if (downloadPath.startsWith("http")) {
-  finalDownloadUrl = downloadPath;
-} else if (downloadPath.startsWith("/api")) {
-  finalDownloadUrl = `http://localhost:5000${downloadPath}`;
-} else if (downloadPath.startsWith("/")) {
-  finalDownloadUrl = `${API_BASE_URL}${downloadPath}`;
-}
-
-if (finalDownloadUrl) {
-  logs.innerHTML += `
-    <div style="margin-top:20px;">
-      <a href="${finalDownloadUrl}"
-         target="_blank"
-         download
-         class="btn btn-primary"
-         style="display:inline-block;padding:12px 20px;background:#16a34a;color:white;text-decoration:none;border-radius:8px;font-weight:600;">
-        ⬇️ Download ${escapeHtml(filename)}
-      </a>
-    </div>
-  `;
+  if (finalDownloadUrl) {
+    logs.innerHTML += `
+      <div style="margin-top:20px;">
+        <a href="${finalDownloadUrl}"
+           target="_blank"
+           download
+           class="btn btn-primary"
+           style="display:inline-block;padding:12px 20px;background:#16a34a;color:white;text-decoration:none;border-radius:8px;font-weight:600;">
+          ⬇️ Download ${escapeHtml(filename)}
+        </a>
+      </div>
+    `;
+  }
 }
   
 

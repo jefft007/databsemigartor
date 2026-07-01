@@ -5,21 +5,26 @@ from backend.models.history_model import MigrationHistory
 from backend.extensions import db
 
 
+from backend.utils.decorators import admin_required
+
 class HistoryListResource(Resource):
-    """Endpoint to list migration history records."""
+    """Endpoint to list current user's migration history records."""
     @jwt_required()
     def get(self):
         user_id = get_jwt_identity()
-        claims = get_jwt()
-        role = claims.get("role", "")
-        
-        if str(role).lower() == "admin":
-            records = MigrationHistory.query.order_by(MigrationHistory.timestamp.desc()).all()
-        else:
-            records = MigrationHistory.query.filter_by(user_id=user_id).order_by(MigrationHistory.timestamp.desc()).all()
-            
+        records = MigrationHistory.query.filter_by(user_id=user_id).order_by(MigrationHistory.timestamp.desc()).all()
         history = [record.to_dict() for record in records]
+        return {
+            "history": history,
+            "count": len(history)
+        }, 200
 
+class HistoryAllResource(Resource):
+    """Admin-only endpoint to list all migration history records."""
+    @admin_required
+    def get(self):
+        records = MigrationHistory.query.order_by(MigrationHistory.timestamp.desc()).all()
+        history = [record.to_dict() for record in records]
         return {
             "history": history,
             "count": len(history)

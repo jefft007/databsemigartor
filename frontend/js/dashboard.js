@@ -32,22 +32,29 @@ function initDashboardPage() {
 
 async function loadDashboardData(user) {
   try {
-    const [historyRes, adminRes] = await Promise.all([
-      apiRequest('/history', 'GET'),
-      user.role === 'Admin'
+    const historyEndpoint = String(user.role).toLowerCase() === 'admin' ? '/history/all' : '/history';
+    const [historyRes, statsRes] = await Promise.all([
+      apiRequest(historyEndpoint, 'GET'),
+      String(user.role).toLowerCase() === 'admin'
         ? apiRequest('/admin/stats', 'GET')
-        : Promise.resolve(null),
+        : apiRequest('/user/stats', 'GET'),
     ]);
 
     const history = normalizeHistoryResponse(historyRes);
-    const adminStats = adminRes || {};
+    const stats = statsRes || {};
 
-    renderSummary(history, adminStats, user);
-
-    renderDashboardCharts(history, adminStats, user);
+    renderSummary(history, stats, user);
+    renderDashboardCharts(history, stats, user);
     
-    if (user.role === 'Admin') {
-      renderRecentActivity(adminStats.recent_migrations || []);
+    if (String(user.role).toLowerCase() === 'admin') {
+      renderRecentActivity(stats.recent_migrations || history.slice(0, 5));
+    } else {
+      renderRecentActivity(stats.recent_migrations || history.slice(0, 5));
+    }
+    
+    // Auto-refresh every 10 seconds
+    if (!window._dashboardRefreshInterval) {
+      window._dashboardRefreshInterval = setInterval(() => loadDashboardData(user), 10000);
     }
   } catch (error) {
     console.error('Dashboard load failed:', error);
@@ -67,30 +74,31 @@ function getStatus(record) {
   return String(record.status || '').toLowerCase();
 }
 
-function renderSummary(history, adminStats, user) {
-  let total, successful, failed, reports;
-  
-  if (user && user.role === 'Admin' && Object.keys(adminStats).length > 0) {
-    total = adminStats.total_migrations || 0;
-    successful = adminStats.successful_migrations || 0;
-    failed = adminStats.failed_migrations || 0;
-    reports = adminStats.total_reports || total;
-  } else {
-    total = history.length;
-    successful = history.filter((r) => getStatus(r).includes('completed') || getStatus(r).includes('success')).length;
-    failed = history.filter((r) => getStatus(r).includes('failed')).length;
-    reports = history.filter((r) => r.report_summary).length;
-  }
+function renderSummary(history, stats, user) {
+  const total = stats.total_migrations || 0;
+  const successful = stats.successful_migrations || 0;
+  const failed = stats.failed_migrations || 0;
+  const reports = stats.total_reports || 0;
 
   const summaryContainer = document.getElementById('dashboard-summary');
   if (!summaryContainer) return;
 
-  summaryContainer.innerHTML = `
-    <div class="card metric-card"><h3>Total Migrations</h3><strong>${total}</strong></div>
-    <div class="card metric-card"><h3>Successful</h3><strong>${successful}</strong></div>
-    <div class="card metric-card"><h3>Failed</h3><strong>${failed}</strong></div>
-    <div class="card metric-card"><h3>Reports Generated</h3><strong>${reports}</strong></div>
+  const isAdmin = user && String(user.role).toLowerCase() === 'admin';
+  const prefix = isAdmin ? 'Total ' : 'My ';
+
+  let html = `
+    <div class="card metric-card"><h3>${prefix}Migrations</h3><strong>${total}</strong></div>
+    <div class="card metric-card"><h3>${isAdmin ? '' : 'My '}Successful</h3><strong>${successful}</strong></div>
+    <div class="card metric-card"><h3>${isAdmin ? '' : 'My '}Failed</h3><strong>${failed}</strong></div>
+    <div class="card metric-card"><h3>${prefix}Reports</h3><strong>${reports}</strong></div>
   `;
+
+  if (isAdmin) {
+    const totalUsers = stats.total_users || 0;
+    html += `<div class="card metric-card"><h3>Total Users</h3><strong>${totalUsers}</strong></div>`;
+  }
+
+  summaryContainer.innerHTML = html;
 }
 
 
@@ -129,7 +137,7 @@ function renderRecentActivity(migrations) {
   `).join('');
 }
 
-function renderDashboardCharts(history, adminStats, user) {
+function renderDashboardCharts(history, stats, user) {
   if (!window.Chart) return;
 
   const trends = document.getElementById('migration-trends-chart');
@@ -184,19 +192,24 @@ function renderDashboardCharts(history, adminStats, user) {
 
   const activity = document.getElementById('user-activity-chart');
   if (activity) {
-    const totalUsers = Number(adminStats.total_users || 0);
-    const totalMigrations = user && user.role === 'Admin' ? (adminStats.total_migrations || 0) : history.length;
-    const totalReports = user && user.role === 'Admin' ? (adminStats.total_reports || totalMigrations) : history.filter((r) => r.report_summary).length;
+    const isAdmin = user && String(user.role).toLowerCase() === 'admin';
+    const totalUsers = isAdmin ? Number(stats.total_users || 0) : null;
+    const totalMigrations = stats.total_migrations || 0;
+    const totalReports = stats.total_reports || 0;
+
+    const labels = isAdmin ? ['Users', 'Migrations', 'Reports'] : ['Migrations', 'Reports'];
+    const data = isAdmin ? [totalUsers, totalMigrations, totalReports] : [totalMigrations, totalReports];
+    const backgroundColor = isAdmin ? ['#6366F1', '#22C55E', '#F59E0B'] : ['#22C55E', '#F59E0B'];
 
     new Chart(activity, {
       type: 'bar',
       data: {
-        labels: ['Users', 'Migrations', 'Reports'],
+        labels: labels,
         datasets: [
           {
             label: 'Total',
-            data: [totalUsers, totalMigrations, totalReports],
-            backgroundColor: ['#6366F1', '#22C55E', '#F59E0B'],
+            data: data,
+            backgroundColor: backgroundColor,
           },
         ],
       },

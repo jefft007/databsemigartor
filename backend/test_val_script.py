@@ -1,0 +1,1 @@
+import requests; print(requests.post('http://127.0.0.1:5000/api/import/validate', data={'column_type_overrides': '{}', 'corrections': '{}'}, files={'file': ('test_val.csv', open('../test_val.csv', 'rb'))}).json())

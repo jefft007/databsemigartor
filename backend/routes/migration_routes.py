@@ -1,5 +1,6 @@
 from flask import request
 from flask_restful import Resource
+from flask_jwt_extended import jwt_required, get_jwt_identity
 from werkzeug.utils import secure_filename
 
 from backend.models.migration_model import Migration
@@ -16,12 +17,25 @@ from backend.database.connection_manager import create_engine_for_config, _DEFAU
 
 import json
 from sqlalchemy import text
+from datetime import datetime, timezone
+
+def format_duration(td):
+    total_seconds = int(td.total_seconds())
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours > 0:
+        return f"{hours} hr {minutes} min {seconds} sec"
+    if minutes > 0:
+        return f"{minutes} min {seconds} sec"
+    return f"{seconds} sec"
 
 
 class SqlToSqlResource(Resource):
     """Endpoint to migrate tables from one SQL database to another."""
 
+    @jwt_required(optional=True)
     def post(self):
+        user_id = get_jwt_identity()
         payload = request.get_json(silent=True) or {}
         defaults = {
             "source_db_type": "mysql",
@@ -41,6 +55,7 @@ class SqlToSqlResource(Resource):
         if not payload:
             payload = get_placeholder_data(defaults)
 
+        started_at = datetime.now(timezone.utc)
         migration_record = Migration(
             migration_type="sql_to_sql",
             source_db=f"{payload.get('source_db_type')}://{payload.get('source_host')}",
@@ -52,6 +67,10 @@ class SqlToSqlResource(Resource):
 
         try:
             report_data = migrate_sql_to_sql(payload)
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
             migration_record.status = "completed"
             report = Report(
                 migration_id=migration_record.id,
@@ -61,6 +80,16 @@ class SqlToSqlResource(Resource):
                     report_data.get("summary", []),
                     default=str
                 ),
+                user_id=user_id,
+                migration_type="sql_to_sql",
+                source_db=migration_record.source_db,
+                target_db=migration_record.target_db,
+                source_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
+                target_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str,
+                status="completed"
             )
             db.session.add(report)
             db.session.commit()
@@ -70,9 +99,15 @@ class SqlToSqlResource(Resource):
                 migration_type="sql_to_sql",
                 source_db=migration_record.source_db,
                 target_db=migration_record.target_db,
+                source_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
+                target_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
                 status="completed",
                 errors=None,
                 report_summary=report.summary,
+                user_id=user_id,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
             )
             db.session.add(history)
             db.session.commit()
@@ -81,6 +116,10 @@ class SqlToSqlResource(Resource):
                 "report": report_data
             }, 200
         except Exception as exc:
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
             migration_record.status = "failed"
             migration_record.error_message = str(exc)
             db.session.rollback()
@@ -90,9 +129,15 @@ class SqlToSqlResource(Resource):
                 migration_type="sql_to_sql",
                 source_db=migration_record.source_db,
                 target_db=migration_record.target_db,
+                source_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
+                target_table="Multiple" if len(payload.get("tables", [])) > 1 else payload.get("tables", [""])[0] if payload.get("tables") else "",
                 status="failed",
                 errors=str(exc),
                 report_summary="Migration failed.",
+                user_id=user_id,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
             )
             db.session.add(history)
             db.session.commit()
@@ -148,19 +193,110 @@ class FileImportResource(Resource):
         if "<FRONTEND" in str(file_path):
             return {"message": "Replace placeholder file path with a real file path."}, 400
 
+        started_at = datetime.now(timezone.utc)
+        migration_record = Migration(
+            migration_type="file_to_sql",
+            source_db="file",
+            target_db=payload.get("target_db_type") or "sqlite",
+            status="running",
+        )
+        db.session.add(migration_record)
+        db.session.commit()
+
         try:
             import_result = import_file_to_sql(payload)
-            return {"message": "File import completed.", "result": import_result}, 200
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_report = import_result.get("migration_report", {}).get("summary", {})
+            failed = migration_report.get("failed", 0)
+            cancelled = migration_report.get("cancelled", 0)
+            status = "completed"
+            if failed > 0 or cancelled > 0:
+                status = "Completed with Warnings"
+                
+            migration_record.status = status
+            
+            report = Report(
+                migration_id=migration_record.id,
+                report_format="json",
+                file_path="",
+                summary=json.dumps(import_result, default=str),
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str,
+                status=status
+            )
+            db.session.add(report)
+            db.session.commit()
+            migration_record.report_id = report.id
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                status=status,
+                errors=None,
+                report_summary=report.summary,
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
+
+            return make_json_safe({"message": "File import completed.", "result": import_result}), 200
         except FileValidationError as exc:
-            return {
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
+            return make_json_safe({
                 "message": "Import blocked: the file still contains missing values.",
                 "rejected": True,
                 "warning_count": len(exc.issues),
                 "warnings": exc.issues,
-            }, 400
+            }), 400
         except FileNotFoundError:
+            migration_record.status = "failed"
+            migration_record.error_message = f"File not found: {file_path}"
+            db.session.commit()
             return {"message": f"File not found: {file_path}"}, 404
         except Exception as exc:
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                status="failed",
+                errors=str(exc),
+                report_summary="Migration failed.",
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
             return {"message": "File import failed.", "error": str(exc)}, 500
 
 
@@ -181,19 +317,110 @@ class FileImportCorrectedResource(Resource):
         if not file_path:
             return {"message": "file_path is required."}, 400
 
+        started_at = datetime.now(timezone.utc)
+        migration_record = Migration(
+            migration_type="file_to_sql",
+            source_db="file",
+            target_db=payload.get("target_db_type") or "sqlite",
+            status="running",
+        )
+        db.session.add(migration_record)
+        db.session.commit()
+
         try:
             import_result = import_corrected_file_to_sql(payload)
-            return {"message": "File import completed.", "result": import_result}, 200
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_report = import_result.get("migration_report", {}).get("summary", {})
+            failed = migration_report.get("failed", 0)
+            cancelled = migration_report.get("cancelled", 0)
+            status = "completed"
+            if failed > 0 or cancelled > 0:
+                status = "Completed with Warnings"
+                
+            migration_record.status = status
+            
+            report = Report(
+                migration_id=migration_record.id,
+                report_format="json",
+                file_path="",
+                summary=json.dumps(import_result, default=str),
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str,
+                status=status
+            )
+            db.session.add(report)
+            db.session.commit()
+            migration_record.report_id = report.id
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                status=status,
+                errors=None,
+                report_summary=report.summary,
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
+
+            return make_json_safe({"message": "File import completed.", "result": import_result}), 200
         except FileValidationError as exc:
-            return {
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
+            return make_json_safe({
                 "message": "Import blocked: some rows still have missing values after correction.",
                 "rejected": True,
                 "warning_count": len(exc.issues),
                 "warnings": exc.issues,
-            }, 400
+            }), 400
         except FileNotFoundError:
+            migration_record.status = "failed"
+            migration_record.error_message = f"File not found: {file_path}"
+            db.session.commit()
             return {"message": f"File not found: {file_path}"}, 404
         except Exception as exc:
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="file_to_sql",
+                source_db="file",
+                target_db=migration_record.target_db,
+                source_table="file",
+                target_table=payload.get("target_table", "table"),
+                status="failed",
+                errors=str(exc),
+                report_summary="Migration failed.",
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
             return {"message": "File import failed.", "error": str(exc)}, 500
 
 
@@ -211,12 +438,93 @@ class SqlExportResource(Resource):
         if not source_table:
             return {"message": "source_table is required."}, 400
 
+        started_at = datetime.now(timezone.utc)
+        migration_record = Migration(
+            migration_type="sql_to_file",
+            source_db=payload.get("source_db_type", "sqlite"),
+            target_db="file",
+            status="running",
+        )
+        db.session.add(migration_record)
+        db.session.commit()
+
         try:
             export_result = export_sql_to_file(payload)
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_record.status = "completed"
+            
+            report = Report(
+                migration_id=migration_record.id,
+                report_format="json",
+                file_path="",
+                summary=json.dumps(export_result, default=str),
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                migration_type="sql_to_file",
+                source_db=migration_record.source_db,
+                target_db="file",
+                source_table=source_table,
+                target_table="file",
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str,
+                status="completed"
+            )
+            db.session.add(report)
+            db.session.commit()
+            migration_record.report_id = report.id
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="sql_to_file",
+                source_db=migration_record.source_db,
+                target_db="file",
+                source_table=source_table,
+                target_table="file",
+                status="completed",
+                errors=None,
+                report_summary=report.summary,
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
+
             return {"message": "Export completed.", "result": export_result}, 200
         except ValueError as exc:
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
             return {"message": str(exc)}, 400
         except Exception as exc:
+            completed_at = datetime.now(timezone.utc)
+            duration_td = completed_at - started_at
+            duration_str = format_duration(duration_td)
+            
+            migration_record.status = "failed"
+            migration_record.error_message = str(exc)
+            db.session.commit()
+            
+            history = MigrationHistory(
+                migration_type="sql_to_file",
+                source_db=migration_record.source_db,
+                target_db="file",
+                source_table=source_table,
+                target_table="file",
+                status="failed",
+                errors=str(exc),
+                report_summary="Export failed.",
+                user_id=get_jwt_identity() if request.headers.get("Authorization") else None,
+                started_at=started_at,
+                completed_at=completed_at,
+                duration=duration_str
+            )
+            db.session.add(history)
+            db.session.commit()
             return {"message": "Export failed.", "error": str(exc)}, 500
 
 
@@ -299,13 +607,55 @@ class TestConnectionResource(Resource):
             }, 200   # Always 200 so the frontend receives JSON, not a fetch error
 
 
+import pandas as pd
+import numpy as np
+from datetime import date, datetime
+from flask import jsonify
+
+def make_json_safe(value):
+    from datetime import datetime, date
+    import pandas as pd
+    import numpy as np
+
+    if isinstance(value, dict):
+        return {k: make_json_safe(v) for k, v in value.items()}
+
+    if isinstance(value, list):
+        return [make_json_safe(v) for v in value]
+
+    if isinstance(value, tuple):
+        return [make_json_safe(v) for v in value]
+
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+
+    if isinstance(value, np.integer):
+        return int(value)
+
+    if isinstance(value, np.floating):
+        return float(value)
+
+    if isinstance(value, np.bool_):
+        return bool(value)
+
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+
+    return value
+
 class FileValidateResource(Resource):
     """Validate a file before importing — returns all rows with issue flags.
     Does NOT write to any database.
     """
 
     def post(self):
-        import os
+        import json as _json
         from backend.converters.validate_import import validate_file_for_import
 
         if request.is_json:
@@ -329,35 +679,48 @@ class FileValidateResource(Resource):
         if not file_path:
             return {"message": "A file upload is required."}, 400
 
+        if "<FRONTEND" in str(file_path):
+            return {"message": "Replace placeholder file path with a real file path."}, 400
+
         try:
             overrides_raw = payload.get("column_type_overrides") or "{}"
+
             if isinstance(overrides_raw, str):
-                import json as _json
                 overrides = _json.loads(overrides_raw)
             else:
                 overrides = overrides_raw
 
             enum_values_raw = payload.get("column_enum_values") or "{}"
             if isinstance(enum_values_raw, str):
-                import json as _json
                 enum_values = _json.loads(enum_values_raw)
             else:
                 enum_values = enum_values_raw
+
+            corrections_raw = payload.get("corrections") or "{}"
+            if isinstance(corrections_raw, str):
+                corrections = _json.loads(corrections_raw)
+            else:
+                corrections = corrections_raw
 
             page = int(payload.get("page", 1))
             page_size = int(payload.get("page_size", 100))
 
             result = validate_file_for_import(
-                file_path,
+                file_path=file_path,
                 column_type_overrides=overrides,
                 column_enum_values=enum_values,
+                corrections=corrections,
                 page=page,
                 page_size=page_size,
             )
+
             result["file_path"] = file_path
-            return {"validation": result}, 200
+            
+            
+            return make_json_safe(result), 200
 
         except FileNotFoundError:
             return {"message": f"File not found: {file_path}"}, 404
+
         except Exception as exc:
             return {"message": "Validation failed.", "error": str(exc)}, 500

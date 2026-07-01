@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import or_
@@ -39,6 +40,8 @@ def authenticate_user(login_id: str, password: str) -> Optional[User]:
     ).first()
 
     if user and check_password(password, user.password_hash):
+        user.last_login = datetime.utcnow()
+        db.session.commit()
         return user
 
     return None

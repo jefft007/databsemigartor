@@ -1,5 +1,7 @@
 async function loadReportHistory() {
-  return await apiRequest('/reports', 'GET');
+  const userRole = String(getUserInfo()?.role || '').toLowerCase();
+  const endpoint = userRole === 'admin' ? '/reports/all' : '/reports';
+  return await apiRequest(endpoint, 'GET');
 }
 
 const _historyCache = {};

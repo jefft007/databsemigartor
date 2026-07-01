@@ -18,7 +18,7 @@ function initAuthPage() {
       if (response.token) {
         localStorage.setItem('sqlMigratorToken', response.token);
         setUserInfo(response.user);
-        window.location.href = response.user.role === 'Admin' ? '../pages/admin_dashboard.html' : '../pages/dashboard.html';
+        window.location.href = response.user.role === 'admin' ? '../pages/admin_dashboard.html' : '../pages/dashboard.html';
       } else {
         messageBox.textContent = response.message || 'Login failed.';
         messageBox.className = 'auth-error';

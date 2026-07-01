@@ -19,7 +19,7 @@ class RegisterResource(Resource):
             "username": None,
             "email": None,
             "password": None,
-            "role": "User",
+            "role": "user",
         }
 
         if not payload:
@@ -28,7 +28,7 @@ class RegisterResource(Resource):
         username = sanitize_string(payload.get("username", "") or payload.get("fullname", ""))
         email = sanitize_string(payload.get("email", ""))
         password = payload.get("password", "")
-        role = "User"
+        role = "user"
 
         if (
             "<FRONTEND" in username
@@ -97,7 +97,9 @@ class LoginResource(Resource):
 
         return {
             "token": token,
+            "access_token": token,
             "user": {
+                "id": user.id,
                 "name": user.username,
                 "email": user.email,
                 "role": user.role,

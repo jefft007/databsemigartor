@@ -12,3 +12,4 @@ pymysql>=1.0.3
 psycopg2-binary>=2.9.8
 fpdf>=1.7.2
 pytest>=7.0.0
+oracledb

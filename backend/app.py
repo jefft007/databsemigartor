@@ -15,9 +15,9 @@ from backend.config import Config
 from backend.extensions import db, jwt
 from backend.auth.auth_routes import RegisterResource, LoginResource, LogoutResource
 from backend.routes.migration_routes import SqlToSqlResource, MigrationStatusResource, MigrationHistoryResource, FileImportResource, SqlExportResource, SchemaGeneratorResource, TestConnectionResource, FileValidateResource, FileImportCorrectedResource
-from backend.routes.history_routes import HistoryListResource, HistoryDeleteResource
-from backend.routes.admin_routes import AdminUserListResource, AdminUserDeleteResource, AdminStatsResource
-from backend.routes.report_routes import ReportResource, ReportsListResource, ReportGenerateResource, ReportDownloadResource
+from backend.routes.history_routes import HistoryListResource, HistoryAllResource, HistoryDeleteResource
+from backend.routes.admin_routes import AdminUserListResource, AdminUserDetailResource, AdminStatsResource
+from backend.routes.report_routes import ReportResource, ReportsListResource, ReportsAllResource, ReportGenerateResource, ReportDownloadResource
 from backend.utils.logger import setup_logging
 
 from flask_cors import CORS
@@ -56,15 +56,21 @@ def create_app() -> Flask:
 
     # History endpoints
     api.add_resource(HistoryListResource, "/api/history")
+    api.add_resource(HistoryAllResource, "/api/history/all")
     api.add_resource(HistoryDeleteResource, "/api/history/<int:history_id>")
+
+    # Dashboard endpoint
+    from backend.routes.dashboard_routes import UserStatsResource
+    api.add_resource(UserStatsResource, "/api/user/stats")
 
     # Admin endpoints
     api.add_resource(AdminUserListResource, "/api/admin/users")
-    api.add_resource(AdminUserDeleteResource, "/api/admin/user/<int:user_id>")
+    api.add_resource(AdminUserDetailResource, "/api/admin/user/<int:user_id>")
     api.add_resource(AdminStatsResource, "/api/admin/stats")
 
     # Reports endpoints
     api.add_resource(ReportsListResource, "/api/reports")
+    api.add_resource(ReportsAllResource, "/api/reports/all")
     api.add_resource(ReportResource, "/api/reports/<int:report_id>")
     api.add_resource(ReportGenerateResource, "/api/reports/generate")
     api.add_resource(ReportDownloadResource, "/api/reports/<int:report_id>/download")
@@ -76,6 +82,21 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        
+        # Safely upgrade existing schema to add missing columns if they don't exist
+        from sqlalchemy import inspect, text
+        engine = db.engine
+        inspector = inspect(engine)
+        if "users" in inspector.get_table_names():
+            columns = [col["name"] for col in inspector.get_columns("users")]
+            with engine.connect() as conn:
+                if "is_active" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1 NOT NULL"))
+                if "created_at" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP"))
+                if "last_login" not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN last_login DATETIME"))
+                conn.commit()
 
     return app
 
